@@ -35,13 +35,27 @@ for hour in "${hours[@]}"; do
   validHours+="$((10#$hour)),"
 done
 
+backupPid=''
+shutdown() {
+  trap - INT TERM HUP
+  if [[ -n "$backupPid" ]]; then
+    kill -TERM "$backupPid" 2>/dev/null || true
+    wait "$backupPid" || true
+  fi
+  exit 143
+}
+trap shutdown INT TERM HUP
+
 lastRun=''
 while true; do
   hour=$(date +%H)
   slot=$(date +%Y-%m-%d-%H)
   if [[ $(date +%M) == 00 && "$validHours" == *,"$((10#$hour))",* && "$slot" != "$lastRun" ]]; then
     lastRun="$slot"
-    /usr/local/bin/backup.sh || echo "Backup failed: $slot" >&2
+    /usr/local/bin/backup.sh &
+    backupPid=$!
+    if ! wait "$backupPid"; then echo "Backup failed: $slot" >&2; fi
+    backupPid=''
   fi
   sleep 20
 done
