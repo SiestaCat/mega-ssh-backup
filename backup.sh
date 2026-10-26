@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
@@ -60,4 +59,28 @@ IFS='|' read -ra entries <<< "$PATHS_BACKUP"
 for entry in "${entries[@]}"; do
   name=${entry%%,*}
   source=${entry#*,}
-  [[ "$entry
+  [[ "$entry" == *,* && "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ && "$source" == /* ]] || { echo "Invalid PATHS_BACKUP entry: $entry" >&2; exit 1; }
+done
+
+runDir=$(mktemp -d /backups/run.XXXXXX)
+stamp=$(date +%Y-%m-%d-%H)
+
+if [[ -n ${PRE_CMD:-} ]]; then run ssh "${sshArgs[@]}" "$HOSTNAME" "$PRE_CMD"; fi
+
+for entry in "${entries[@]}"; do
+  name=${entry%%,*}
+  source=${entry#*,}
+  run rsync -a -s -e 'ssh -i /root/.ssh/id_backup -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3' -- "$HOSTNAME:${source%/}/" "$runDir/$name/"
+done
+
+runPost
+
+cd "$runDir"
+for entry in "${entries[@]}"; do
+  name=${entry%%,*}
+  archive="$name-$stamp.zip"
+  run zip -q -r -9 -y "$archive" "$name"
+  run rclone copyto "$archive" "mega:${MEGA_FOLDER%/}/$archive"
+  rm -rf -- "$name" "$archive"
+done
+rmdir "$runDir"
