@@ -108,7 +108,11 @@ for entry in "${entries[@]}"; do
   archive="$name-$stamp.zip"
   
   log INFO "Compressing $name into $archive"
-  run zip -q -r -9 -y "$archive" "$name"
+  zipCmd=(zip -q -r -9 -y)
+  if [[ -n ${ZIP_PASSWORD:-} ]]; then
+    zipCmd+=(-P "$ZIP_PASSWORD")
+  fi
+  run "${zipCmd[@]}" "$archive" "$name"
   
   log INFO "Uploading $archive to mega"
   run rclone copyto "$archive" "mega:${MEGA_FOLDER%/}/$archive"
